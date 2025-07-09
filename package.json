@@ -1,5 +1,5 @@
 {
-  "name": "b-video",
+  "name": "yoom",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -15,8 +15,8 @@
     "@radix-ui/react-popover": "^1.0.7",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-toast": "^1.1.5",
-    "@stream-io/node-sdk": "^0.1.12",
-    "@stream-io/video-react-sdk": "^0.5.1",
+    "agora-access-token": "^2.0.4",
+    "agora-rtc-react": "^2.4.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.4.0",

@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,40 +7,6 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-}
-
-/* ======== stream css overrides ======== */
-.str-video__call-stats {
-  max-width: 500px;
-  position: relative;
-}
-
-.str-video__speaker-layout__wrapper {
-  max-height: 700px;
-}
-
-.str-video__participant-details {
-  color: white;
-}
-
-.str-video__menu-container {
-  color: white;
-}
-
-.str-video__notification {
-  color: white;
-}
-
-.str-video__participant-list {
-  background-color: #1c1f2e;
-  padding: 10px;
-  border-radius: 10px;
-  color: white;
-  height: 100%;
-}
-
-.str-video__call-controls__button {
-  height: 40px;
 }
 
 .glassmorphism {
@@ -54,7 +21,6 @@
 }
 
 /* ==== clerk class override ===== */
-
 .cl-userButtonPopoverActionButtonIcon {
   color: white;
 }
@@ -91,7 +57,6 @@
 }
 
 /* animation */
-
 .show-block {
   width: 100%;
   max-width: 350px;
@@ -104,7 +69,6 @@
     animation-timing-function: ease-in;
     width: 0%;
   }
-
   100% {
     animation-timing-function: ease-in;
     width: 100%;

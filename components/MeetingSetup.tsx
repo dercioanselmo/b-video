@@ -1,88 +1,97 @@
+// components/MeetingSetup.tsx
 'use client';
-import { useEffect, useState } from 'react';
-import {
-  DeviceSettings,
-  VideoPreview,
-  useCall,
-  useCallStateHooks,
-} from '@stream-io/video-react-sdk';
 
-import Alert from './Alert';
+import { useState, useEffect } from 'react';
+import { useAgoraClient } from '@/providers/AgoraClientProvider';
+import { useUser } from '@clerk/nextjs';
+import { generateAgoraToken } from '@/actions/agora.actions';
+import { useJoin, useLocalCameraTrack, useLocalMicrophoneTrack } from 'agora-rtc-react';
 import { Button } from './ui/button';
+import Alert from './Alert';
 
-const MeetingSetup = ({
-  setIsSetupComplete,
-}: {
+interface MeetingSetupProps {
   setIsSetupComplete: (value: boolean) => void;
-}) => {
-  // https://getstream.io/video/docs/react/guides/call-and-participant-state/#call-state
-  const { useCallEndedAt, useCallStartsAt } = useCallStateHooks();
-  const callStartsAt = useCallStartsAt();
-  const callEndedAt = useCallEndedAt();
-  const callTimeNotArrived =
-    callStartsAt && new Date(callStartsAt) > new Date();
-  const callHasEnded = !!callEndedAt;
+  channelName: string;
+  scheduledTime?: Date;
+}
 
-  const call = useCall();
+const MeetingSetup = ({ setIsSetupComplete, channelName, scheduledTime }: MeetingSetupProps) => {
+  const { client, appId } = useAgoraClient();
+  const { user } = useUser();
+  const { localMicrophoneTrack, isLoading: isMicLoading } = useLocalMicrophoneTrack();
+  const { localCameraTrack, isLoading: isCamLoading } = useLocalCameraTrack();
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCamOn, setIsCamOn] = useState(true);
 
-  if (!call) {
-    throw new Error(
-      'useStreamCall must be used within a StreamCall component.',
+  useEffect(() => {
+    if (!client || !appId || !user) return;
+
+    if (!isMicOn && localMicrophoneTrack) localMicrophoneTrack.setEnabled(false);
+    if (!isCamOn && localCameraTrack) localCameraTrack.setEnabled(false);
+
+    const videoContainer = document.getElementById('video-preview');
+    if (videoContainer && localCameraTrack && isCamOn) {
+      localCameraTrack.play(videoContainer);
+    }
+
+    return () => {
+      localCameraTrack?.close();
+      localMicrophoneTrack?.close();
+    };
+  }, [client, appId, user, isMicOn, isCamOn, localCameraTrack, localMicrophoneTrack]);
+
+  const joinMeeting = async () => {
+    if (!client || !appId || !user) return;
+
+    try {
+      const { token } = await generateAgoraToken(channelName);
+      await useJoin({ appid: appId, channel: channelName, token, uid: user.id });
+      setIsSetupComplete(true);
+    } catch (error) {
+      console.error('Failed to join meeting:', error);
+    }
+  };
+
+  if (callTimeNotArrived) {
+    return (
+      <Alert
+        title={`Your Meeting has not started yet. It is scheduled for ${scheduledTime?.toLocaleString()}`}
+      />
     );
   }
 
-  // https://getstream.io/video/docs/react/ui-cookbook/replacing-call-controls/
-  const [isMicCamToggled, setIsMicCamToggled] = useState(false);
-
-  useEffect(() => {
-    if (isMicCamToggled) {
-      call.camera.disable();
-      call.microphone.disable();
-    } else {
-      call.camera.enable();
-      call.microphone.enable();
-    }
-  }, [isMicCamToggled, call.camera, call.microphone]);
-
-  if (callTimeNotArrived)
-    return (
-      <Alert
-        title={`Your Meeting has not started yet. It is scheduled for ${callStartsAt.toLocaleString()}`}
-      />
-    );
-
-  if (callHasEnded)
-    return (
-      <Alert
-        title="The call has been ended by the host"
-        iconUrl="/icons/call-ended.svg"
-      />
-    );
+  if (isMicLoading || isCamLoading) return <div>Loading media devices...</div>;
 
   return (
-    <div className="flex h-screen w-full flex-col items-center justify-center gap-3 text-white">
-      <h1 className="text-center text-2xl font-bold">Setup</h1>
-      <VideoPreview />
-      <div className="flex h-16 items-center justify-center gap-3">
-        <label className="flex items-center justify-center gap-2 font-medium">
+    <div className='flex h-screen w-full flex-col items-center justify-center gap-3 text-white'>
+      <h1 className='text-center text-2xl font-bold'>Setup</h1>
+      <div id='video-preview' className='w-[640px] h-[480px] bg-dark-3 rounded'></div>
+      <div className='flex h-16 items-center justify-center gap-3'>
+        <label className='flex items-center justify-center gap-2 font-medium'>
           <input
-            type="checkbox"
-            checked={isMicCamToggled}
-            onChange={(e) => setIsMicCamToggled(e.target.checked)}
+            type='checkbox'
+            checked={!isMicOn}
+            onChange={() => {
+              setIsMicOn(!isMicOn);
+              if (localMicrophoneTrack) localMicrophoneTrack.setEnabled(isMicOn);
+            }}
           />
-          Join with mic and camera off
+          Microphone Off
         </label>
-        <DeviceSettings />
+        <label className='flex items-center justify-center gap-2 font-medium'>
+          <input
+            type='checkbox'
+            checked={!isCamOn}
+            onChange={() => {
+              setIsCamOn(!isCamOn);
+              if (localCameraTrack) localCameraTrack.setEnabled(isCamOn);
+            }}
+          />
+          Camera Off
+        </label>
       </div>
-      <Button
-        className="rounded-md bg-green-500 px-4 py-2.5"
-        onClick={() => {
-          call.join();
-
-          setIsSetupComplete(true);
-        }}
-      >
-        Join meeting
+      <Button className='rounded-md bg-green-500 px-4 py-2.5' onClick={joinMeeting}>
+        Join Meeting
       </Button>
     </div>
   );
