@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAgoraClient } from '@/providers/AgoraClientProvider';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useRemoteUsers, RemoteUser } from 'agora-rtc-react';
+import { IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { Users, LayoutList } from 'lucide-react';
 import {
   DropdownMenu,
@@ -26,13 +26,46 @@ const MeetingRoom = () => {
   const isPersonalRoom = !!searchParams.get('personal');
   const [layout, setLayout] = useState<CallLayoutType>('speaker-left');
   const [showParticipants, setShowParticipants] = useState(false);
-  const remoteUsers = useRemoteUsers();
+  const [participants, setParticipants] = useState<IAgoraRTCRemoteUser[]>([]);
 
   useEffect(() => {
     if (!client) return;
 
+    const handleUserJoined = (user: IAgoraRTCRemoteUser) => {
+      setParticipants((prev) => [...prev, user]);
+    };
+
+    const handleUserLeft = (user: IAgoraRTCRemoteUser) => {
+      setParticipants((prev) => prev.filter((p) => p.uid !== user.uid));
+    };
+
+    const handleUserPublished = async (user: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
+      await client.subscribe(user, mediaType);
+      if (mediaType === 'video' && user.videoTrack) {
+        const containerId = `remote-video-${user.uid}`;
+        let container = document.getElementById(containerId);
+        if (!container) {
+          container = document.createElement('div');
+          container.id = containerId;
+          container.className = 'w-[320px] h-[240px] bg-dark-3 rounded';
+          document.getElementById('video-container')?.appendChild(container);
+        }
+        user.videoTrack.play(container);
+      }
+      if (mediaType === 'audio' && user.audioTrack) {
+        user.audioTrack.play();
+      }
+    };
+
+    client.on('user-joined', handleUserJoined);
+    client.on('user-left', handleUserLeft);
+    client.on('user-published', handleUserPublished);
+
     return () => {
-      client?.leave();
+      client.off('user-joined', handleUserJoined);
+      client.off('user-left', handleUserLeft);
+      client.off('user-published', handleUserPublished);
+      client.leave();
     };
   }, [client]);
 
@@ -44,9 +77,9 @@ const MeetingRoom = () => {
   };
 
   const renderParticipants = () => {
-    return remoteUsers.map((user) => (
+    return participants.map((user) => (
       <div key={user.uid} className='p-2 text-white'>
-        <RemoteUser user={user} />
+        <div id={`remote-video-${user.uid}`} className='w-[160px] h-[120px] bg-dark-3 rounded'></div>
         <p>User {user.uid}</p>
       </div>
     ));
@@ -57,8 +90,8 @@ const MeetingRoom = () => {
       layout === 'speaker-left' ? 'flex flex-row-reverse' : 'flex flex-row';
     return (
       <div className={containerClass} id='video-container'>
-        {remoteUsers.map((user) => (
-          <RemoteUser key={user.uid} user={user} />
+        {participants.map((user) => (
+          <div key={user.uid} id={`remote-video-${user.uid}`} className='w-[320px] h-[240px] bg-dark-3 rounded'></div>
         ))}
       </div>
     );

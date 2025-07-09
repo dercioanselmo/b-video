@@ -33,20 +33,25 @@ const MeetingTypeList = () => {
   const createMeeting = async () => {
     if (!user) return;
     try {
-      if (!values.dateTime && meetingState === 'isScheduleMeeting') {
-        toast({ title: 'Please select a date and time' });
-        return;
-      }
       const id = uuidv4();
-      const tokenData = await generateAgoraToken(id);
-      setChannelName(id);
-      if (!values.description) {
-        router.push(`/meeting/${id}`);
-      }
+      await generateAgoraToken(id); // Generate token for the meeting
       toast({ title: 'Meeting Created' });
+      if (meetingState === 'isInstantMeeting') {
+        router.push(`/meeting/${id}`); // Navigate immediately for instant meetings
+      } else if (meetingState === 'isScheduleMeeting') {
+        if (!values.dateTime) {
+          toast({ title: 'Please select a date and time' });
+          return;
+        }
+        setChannelName(id); // Set channelName for scheduled meetings
+      }
     } catch (error) {
       console.error(error);
       toast({ title: 'Failed to create Meeting' });
+    } finally {
+      if (meetingState === 'isInstantMeeting') {
+        setMeetingState(undefined); // Close the modal after navigation
+      }
     }
   };
 
@@ -120,7 +125,10 @@ const MeetingTypeList = () => {
       ) : (
         <MeetingModal
           isOpen={meetingState === 'isScheduleMeeting'}
-          onClose={() => setMeetingState(undefined)}
+          onClose={() => {
+            setMeetingState(undefined);
+            setChannelName(undefined); // Reset channelName
+          }}
           title='Meeting Created'
           handleClick={() => {
             navigator.clipboard.writeText(meetingLink);

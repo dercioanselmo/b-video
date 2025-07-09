@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAgoraClient } from '@/providers/AgoraClientProvider';
 import { useUser } from '@clerk/nextjs';
 import { generateAgoraToken } from '@/actions/agora.actions';
-import { useJoin, useLocalCameraTrack, useLocalMicrophoneTrack } from 'agora-rtc-react';
+import { ILocalVideoTrack, ILocalAudioTrack } from 'agora-rtc-sdk-ng';
 import { Button } from './ui/button';
 import Alert from './Alert';
 
@@ -18,39 +18,68 @@ interface MeetingSetupProps {
 const MeetingSetup = ({ setIsSetupComplete, channelName, scheduledTime }: MeetingSetupProps) => {
   const { client, appId } = useAgoraClient();
   const { user } = useUser();
-  const { localMicrophoneTrack, isLoading: isMicLoading } = useLocalMicrophoneTrack();
-  const { localCameraTrack, isLoading: isCamLoading } = useLocalCameraTrack();
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
+  const [localVideoTrack, setLocalVideoTrack] = useState<ILocalVideoTrack | null>(null);
+  const [localAudioTrack, setLocalAudioTrack] = useState<ILocalAudioTrack | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const now = new Date();
+  const callTimeNotArrived = scheduledTime && scheduledTime > now;
 
   useEffect(() => {
-    if (!client || !appId || !user) return;
-
-    if (!isMicOn && localMicrophoneTrack) localMicrophoneTrack.setEnabled(false);
-    if (!isCamOn && localCameraTrack) localCameraTrack.setEnabled(false);
-
-    const videoContainer = document.getElementById('video-preview');
-    if (videoContainer && localCameraTrack && isCamOn) {
-      localCameraTrack.play(videoContainer);
+    if (!client || !appId || !user) {
+      setIsLoading(false);
+      return;
     }
 
-    return () => {
-      localCameraTrack?.close();
-      localMicrophoneTrack?.close();
+    const initTracks = async () => {
+      try {
+        setIsLoading(true);
+        const [audioTrack, videoTrack] = await Promise.all([
+          client.createMicrophoneAudioTrack(),
+          client.createCameraVideoTrack(),
+        ]);
+        setLocalAudioTrack(audioTrack);
+        setLocalVideoTrack(videoTrack);
+
+        if (!isMicOn) audioTrack.setEnabled(false);
+        if (!isCamOn) videoTrack.setEnabled(false);
+
+        const videoContainer = document.getElementById('video-preview');
+        if (videoContainer && videoTrack) {
+          videoTrack.play(videoContainer);
+        }
+      } catch (error) {
+        console.error('Failed to initialize tracks:', error);
+      } finally {
+        setIsLoading(false);
+      }
     };
-  }, [client, appId, user, isMicOn, isCamOn, localCameraTrack, localMicrophoneTrack]);
+
+    initTracks();
+
+    return () => {
+      localVideoTrack?.close();
+      localAudioTrack?.close();
+    };
+  }, [client, appId, user, isMicOn, isCamOn]);
 
   const joinMeeting = async () => {
     if (!client || !appId || !user) return;
 
     try {
       const { token } = await generateAgoraToken(channelName);
-      await useJoin({ appid: appId, channel: channelName, token, uid: user.id });
+      await client.join(appId, channelName, token, user.id);
+      if (localAudioTrack) await client.publish(localAudioTrack);
+      if (localVideoTrack) await client.publish(localVideoTrack);
       setIsSetupComplete(true);
     } catch (error) {
       console.error('Failed to join meeting:', error);
     }
   };
+
+  if (isLoading) return <div>Loading media devices...</div>;
 
   if (callTimeNotArrived) {
     return (
@@ -59,8 +88,6 @@ const MeetingSetup = ({ setIsSetupComplete, channelName, scheduledTime }: Meetin
       />
     );
   }
-
-  if (isMicLoading || isCamLoading) return <div>Loading media devices...</div>;
 
   return (
     <div className='flex h-screen w-full flex-col items-center justify-center gap-3 text-white'>
@@ -73,7 +100,7 @@ const MeetingSetup = ({ setIsSetupComplete, channelName, scheduledTime }: Meetin
             checked={!isMicOn}
             onChange={() => {
               setIsMicOn(!isMicOn);
-              if (localMicrophoneTrack) localMicrophoneTrack.setEnabled(isMicOn);
+              localAudioTrack?.setEnabled(isMicOn);
             }}
           />
           Microphone Off
@@ -84,7 +111,7 @@ const MeetingSetup = ({ setIsSetupComplete, channelName, scheduledTime }: Meetin
             checked={!isCamOn}
             onChange={() => {
               setIsCamOn(!isCamOn);
-              if (localCameraTrack) localCameraTrack.setEnabled(isCamOn);
+              localVideoTrack?.setEnabled(isCamOn);
             }}
           />
           Camera Off
